@@ -63,7 +63,7 @@ build_manifest_json() {
 
 build_sha256sums() {
   local run_dir="$1"
-  (cd "$run_dir" && find certs crl csr configs profiles_used logs reports state -type f 2>/dev/null | sort | xargs -r sha256sum > manifests/SHA256SUMS)
+  (cd "$run_dir" && find certs crl csr configs profiles_used logs reports -type f 2>/dev/null | sort | xargs -r sha256sum > manifests/SHA256SUMS)
 }
 
 build_ceremony_minutes() {
@@ -75,23 +75,18 @@ build_ceremony_minutes() {
 - Date (UTC): $(date -u +%FT%TZ)
 - Hostname: $(hostname)
 - Mode: ${mode}
-- Key storage mode: ${ROOTCA_KEY_MODE:-unknown}
-- Organization:
-- Operators:
-- Witnesses:
-- HSM Serial: ${HSM_SERIAL:-N/A}
-- Slot/Partition:
+- Organization: 
+- Operators: 
+- Witnesses: 
+- HSM Serial: 
+- Slot/Partition: 
 - Root key label: ${ROOTCA_KEY_LABEL:-N/A}
-- Root key file: ${ROOTCA_KEY_FILE:-N/A}
 - M-of-N: ${ROOTCA_M:-N/A}/${ROOTCA_N:-N/A}
 
 ## Results
 - Root certificate fingerprint: (see reports/root_cert_report.txt)
 - Root CRL fingerprint: (see reports/root_crl_report.txt)
 - Issuing CA signing details: (if performed, see reports/issuing_ca_report.txt)
-
-## Mode indicator
-$( [[ "${ROOTCA_KEY_MODE:-}" == "software" ]] && echo '- SOFTWARE KEY MODE USED (LAB/TEST ONLY)' || echo '- LUNA HSM MODE USED' )
 
 ## Sanitized command log excerpt
 
@@ -108,7 +103,6 @@ build_final_summary() {
     echo "Offline Root CA run summary"
     echo "Run directory: ${run_dir}"
     echo "Generated at: $(date -u +%FT%TZ)"
-    echo "Key storage mode: ${ROOTCA_KEY_MODE:-unknown}"
     echo "Artifacts:"
     find "$run_dir" -maxdepth 2 -type f | sed "s#^${run_dir}/# - #"
   } > "$out"
