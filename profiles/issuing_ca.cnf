@@ -1,0 +1,10 @@
+# Issuing CA signing profile v1.0
+[ v3_issuing_ca ]
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer
+basicConstraints = critical, CA:true, pathlen:0
+keyUsage = critical, keyCertSign, cRLSign
+certificatePolicies = @issuing_policies
+
+[ issuing_policies ]
+policyIdentifier = 1.3.6.1.4.1.55555.1.2
