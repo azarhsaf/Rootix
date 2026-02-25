@@ -1,0 +1,41 @@
+$ sudo ./offline-rootca.sh ceremony --dry-run
+
+============================================================
+OFFLINE ROOT CA CEREMONY
+============================================================
+Organization (O) [ExampleOrg]: LabOrg
+Root CA Common Name (CN) [LabOrg Offline Root CA]: LabOrg Test Root CA
+Root CA validity days [7300]: 3650
+Country code (C) [US]: US
+
+Select Root CA Key Storage
+
+  luna) Luna USB HSM (Hardware Protected Key)
+  software) Software Key (Stored Locally for Testing)
+Enter selection: software
+[WARN] WARNING: Software Key Mode is intended ONLY for testing/lab usage.
+[WARN] Private key will be stored locally. Do NOT use for production Root CA.
+Continue in Software Key Mode? [no]: yes
+
+============================================================
+Pre-flight checks
+============================================================
+[INFO] Checking OpenSSL availability...
+[OK] OpenSSL detected: 3.2.2
+[OK] Output base path writable: /var/offline-rootca
+[OK] Disk space check passed.
+[OK] Entropy advisory: 473 available.
+[INFO] Current UTC time: 2026-02-25T12:10:00Z
+Confirm system date/time is correct before certificate operations. Continue? [no]: yes
+[WARN] Network interfaces detected. Offline Root CA operation is recommended in air-gapped mode.
+Continue despite active interfaces? [no]: yes
+[OK] Software mode selected: skipping Luna and PKCS#11 checks.
+Generate local Root private key (rsa) at /var/offline-rootca/outputs/LabOrg/20260225-121000/configs/rootca.key? [no]: yes
+[INFO] [dry-run] Would generate local rsa private key at /var/offline-rootca/outputs/LabOrg/20260225-121000/configs/rootca.key.
+Generate self-signed Root CA certificate using local software key? [no]: yes
+[INFO] [dry-run] Would self-sign Root cert using local key /var/offline-rootca/outputs/LabOrg/20260225-121000/configs/rootca.key.
+Generate initial Root CRL (nextUpdate 30 days)? [no]: yes
+[INFO] [dry-run] Would generate local-key CRL with nextUpdate 30 days.
+Do you want to sign an Issuing CA CSR now? [no]: no
+[INFO] Skipping Issuing CA signing during ceremony.
+[OK] Ceremony complete. Output directory: /var/offline-rootca/outputs/LabOrg/20260225-121000
