@@ -51,34 +51,30 @@ Offline install example:
 rpm -Uvh /mnt/offline-rpms/*.rpm
 ```
 
-If required components are missing, Rootix prints clear offline remediation guidance.
+If provider/engine is absent, script exits with explicit offline remediation instructions.
 
-## Security behavior
-- Uses `set -euo pipefail`.
-- PIN input is hidden (`read -s`/whiptail passwordbox) and never persisted.
-- Logs are sanitized and redact sensitive tokens.
-- In software mode, private key is written to:
-  - `/var/offline-rootca/outputs/<ORG>/<STAMP>/configs/rootca.key`
-  - permissions: `600`, owner `root:root`.
+## Security behaviors
+- No secret persistence: all PINs entered with hidden prompt (`read -s`/password dialog).
+- Script only logs sanitized operations.
+- Designed for air-gapped operation.
+- Root private key remains on Luna HSM (operator performs/validates vendor-specific steps where syntax differs).
 
-## Profiles (authoritative policy)
-These templates control extensions/validity/policy behavior:
+## Profiles
+Edit these files (version-controlled templates) rather than changing script logic:
 - `profiles/defaults.env`
 - `profiles/root_ca.cnf`
 - `profiles/issuing_ca.cnf`
 
-## Output structure
-Per run output path:
+## Output layout
+Per run:
 `/var/offline-rootca/outputs/<ORG>/<YYYYMMDD-HHMMSS>/`
 
-Artifacts:
+Includes:
 - `certs/`, `crl/`, `csr/`, `configs/`, `profiles_used/`, `logs/`, `reports/`, `manifests/`, `state/`
-- `manifests/SHA256SUMS`
-- `manifests/manifest.json`
-- `reports/ceremony_minutes.md`
-- `reports/final_summary.txt`
+- `SHA256SUMS`
+- `manifest.json`
+- `ceremony_minutes.md`
+- `final_summary.txt`
 
-Minutes and summary include the selected key storage mode, including an explicit indicator when software mode was used.
-
-## Luna command uncertainty handling
-Where vendor command syntax can differ by firmware/policy, Rootix uses guided placeholder steps and asks operator confirmation after manual execution. It does not hallucinate exact Luna command details.
+## Notes on Luna commands and M-of-N
+Luna firmware/policies vary. Where exact commands are uncertain, script provides guided placeholders and asks operator confirmation after manual execution. Post-conditions are verified via status/listing checks and expected key/cert outputs.
