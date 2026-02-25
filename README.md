@@ -1,14 +1,22 @@
-# Offline Root CA Automation (Pure Bash)
+# Rootix – Offline Root CA (Pure Bash)
 
-Production-oriented **offline Root CA** utility for Rocky Linux 9 / RHEL 9 / Alma / CentOS-like systems.
+Rootix is an **offline Root CA automation tool** implemented in pure Bash for Rocky Linux 9 / RHEL 9 / Alma / CentOS-like systems.
+
+## Supported key storage modes
+At ceremony/ops runtime, the operator selects one mode:
+
+1. **Luna USB HSM mode** (production): private Root key remains non-exportable in HSM.
+2. **Software Key mode** (lab/testing): private Root key is generated locally and protected with strict file permissions.
+
+> Software mode is for testing/lab only and should not be used for production roots.
 
 ## Scope
-This project automates only Root CA duties:
-- Root key ceremony (HSM-backed, non-exportable key)
+This tool is intentionally minimal for offline Root CA responsibilities:
+- Root key ceremony
 - Root self-signed certificate generation
 - Root CRL generation
 - Issuing CA CSR signing
-- Minimal ops workflows and auditable output packaging
+- Export/integrity packaging for offline transfer
 
 ## Entrypoint
 ```bash
@@ -16,29 +24,29 @@ This project automates only Root CA duties:
 ./offline-rootca.sh ops [--dry-run]
 ```
 
-## Offline dependency installation
-Do not use internet repositories. Gather RPMs on a trusted staging machine, transfer via approved media, then install locally.
+## Offline package requirements
+No online repositories are used by this tool. Install dependencies from local RPM media.
 
-### Required base tools
+### Required base packages
 - bash
 - openssl
-- coreutils (sha256sum, stat)
-- util-linux
-- tar
+- coreutils
 - findutils
+- iproute
+- tar
 - sed, awk, grep
-- lunacm (Luna Client)
 
-### Optional UX
+### Optional UI package
 - whiptail (or dialog)
 
-### PKCS#11 requirements
-Tool auto-detects OpenSSL version and supports:
+### Luna mode additional requirements
+- Luna Client (`lunacm`)
+- Luna PKCS#11 library (`libCryptoki2.so`)
+- OpenSSL PKCS#11 stack:
+  - OpenSSL 3.x: `pkcs11-provider` / `pkcs11prov`
+  - OpenSSL 1.1.1: `libp11` / `openssl-pkcs11`
 
-- **OpenSSL 3.x preferred:** PKCS#11 provider (e.g., `pkcs11-provider`, `pkcs11prov`)
-- **OpenSSL 1.1.1:** PKCS#11 engine (`openssl-pkcs11`, `libp11`)
-
-Offline installation example:
+Offline install example:
 ```bash
 rpm -Uvh /mnt/offline-rpms/*.rpm
 ```
