@@ -2,29 +2,22 @@
 set -euo pipefail
 
 UI_USE_WHIPTAIL=0
-if command -v whiptail >/dev/null 2>&1 && [[ -t 0 ]] && [[ -t 1 ]] && [[ -n "${TERM:-}" ]]; then
+if command -v whiptail >/dev/null 2>&1; then
   UI_USE_WHIPTAIL=1
 fi
 
 info() { printf '[INFO] %s\n' "$*"; }
-ok() { printf '[OK] %s\n' "$*"; }
 warn() { printf '[WARN] %s\n' "$*" >&2; }
 die() { printf '[ERROR] %s\n' "$*" >&2; exit 1; }
 
-section() {
-  printf '\n============================================================\n'
-  printf '%s\n' "$*"
-  printf '============================================================\n'
-}
-
 banner() {
-  section "$*"
+  printf '\n==== %s ====\n' "$*"
 }
 
 prompt_input() {
   local prompt="$1" default="$2" input=""
   if (( UI_USE_WHIPTAIL == 1 )); then
-    input="$(whiptail --inputbox "$prompt" 12 90 "$default" 3>&1 1>&2 2>&3)" || die "Cancelled by user"
+    input="$(whiptail --inputbox "$prompt" 12 80 "$default" 3>&1 1>&2 2>&3)" || die "Cancelled by user"
   else
     read -r -p "${prompt} [${default}]: " input
     input="${input:-$default}"
@@ -35,7 +28,7 @@ prompt_input() {
 prompt_secret() {
   local prompt="$1" value
   if (( UI_USE_WHIPTAIL == 1 )); then
-    value="$(whiptail --passwordbox "$prompt" 10 90 3>&1 1>&2 2>&3)" || die "Cancelled by user"
+    value="$(whiptail --passwordbox "$prompt" 10 80 3>&1 1>&2 2>&3)" || die "Cancelled by user"
   else
     read -r -s -p "${prompt}: " value
     printf '\n' >&2
@@ -46,7 +39,7 @@ prompt_secret() {
 confirm_yes_no() {
   local prompt="$1" default="${2:-no}" ans
   if (( UI_USE_WHIPTAIL == 1 )); then
-    if whiptail --yesno "$prompt" 10 90; then
+    if whiptail --yesno "$prompt" 10 80; then
       return 0
     else
       return 1
@@ -65,20 +58,17 @@ confirm_or_exit() {
 menu_select() {
   local title="$1"; shift
   if (( UI_USE_WHIPTAIL == 1 )); then
-    if whiptail --title "$title" --menu "$title" 20 90 10 "$@" 3>&1 1>&2 2>&3; then
-      return 0
-    fi
-    warn "whiptail UI unavailable/cancelled; falling back to plain prompts."
+    whiptail --title "$title" --menu "$title" 20 90 10 "$@" 3>&1 1>&2 2>&3
+  else
+    local items=("$@")
+    local i
+    printf '%s\n' "$title"
+    for (( i=0; i<${#items[@]}; i+=2 )); do
+      printf '  %s) %s\n' "${items[i]}" "${items[i+1]}"
+    done
+    read -r -p "Choose option: " REPLY
+    printf '%s' "$REPLY"
   fi
-
-  local items=("$@")
-  local i
-  printf '\n%s\n\n' "$title"
-  for (( i=0; i<${#items[@]}; i+=2 )); do
-    printf '  %s) %s\n' "${items[i]}" "${items[i+1]}"
-  done
-  read -r -p "Enter selection: " REPLY
-  printf '%s' "$REPLY"
 }
 
 redact() {

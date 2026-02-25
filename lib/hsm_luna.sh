@@ -3,7 +3,6 @@ set -euo pipefail
 
 LUNACM_BIN="${LUNACM_BIN:-$(command -v lunacm || true)}"
 LUNA_PKCS11_MODULE=""
-HSM_SERIAL=""
 
 ensure_lunacm() {
   [[ -n "$LUNACM_BIN" ]] || die "lunacm not found. Install Luna Client offline before proceeding."
@@ -20,7 +19,7 @@ detect_luna_module() {
     if [[ -f "$c" ]]; then
       LUNA_PKCS11_MODULE="$c"
       export LUNA_PKCS11_MODULE
-      ok "Detected Luna PKCS#11 module: ${LUNA_PKCS11_MODULE}"
+      info "Detected Luna PKCS#11 module: ${LUNA_PKCS11_MODULE}"
       return
     fi
   done
@@ -46,8 +45,6 @@ show_hsm_status() {
   fi
   local out
   out="$(lunacm_capture "hsm show")"
-  HSM_SERIAL="$(printf '%s\n' "$out" | awk -F': *' '/Serial Number/ {print $2; exit}')"
-  export HSM_SERIAL
   printf '%s\n' "$out" | sed -E 's/(Password|PIN|challenge|secret).*/[REDACTED]/Ig'
   out="$(lunacm_capture "slot list")"
   printf '%s\n' "$out" | sed -E 's/(Password|PIN|challenge|secret).*/[REDACTED]/Ig'
@@ -55,7 +52,7 @@ show_hsm_status() {
 
 choose_partition_flow() {
   local choice
-  choice="$(menu_select "Select Luna partition flow" \
+  choice="$(menu_select "Partition flow" \
       "new" "A) New partition initialization flow (guided)" \
       "existing" "B) Use existing partition")"
   printf '%s' "$choice"
@@ -131,6 +128,8 @@ create_hsm_keypair() {
     return
   fi
 
+  local cmd
+  cmd="slot login -label ${token_label} -password <REDACTED>; partition contents"
   warn "Vendor command syntax may vary. Use lunacm manual keypair command if required."
   info "Expected post-condition: private key object with label ${label} exists and is non-exportable."
   confirm_or_exit "Have you executed the Luna keypair generation command manually and verified the key label exists?"
