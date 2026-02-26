@@ -7,34 +7,28 @@ PKCS11_MODE="" # provider|engine
 PKCS11_HELPER="" # provider module or engine id
 
 ensure_base_dependencies() {
-  local dry_run="$1"
   [[ -n "$OPENSSL_BIN" ]] || die "OpenSSL not installed. Install offline RPMs and retry."
   command -v sha256sum >/dev/null 2>&1 || die "sha256sum missing (coreutils)."
   command -v tar >/dev/null 2>&1 || die "tar missing."
-  command -v jq >/dev/null 2>&1 || warn "jq not found; manifest JSON will use shell fallback."
-  if (( dry_run == 1 )); then
-    info "[dry-run] Base dependency checks completed."
-  fi
+  command -v find >/dev/null 2>&1 || die "find missing (findutils)."
 }
 
-detect_pkcs11_stack() {
-  local dry_run="$1"
+detect_openssl_version() {
   local v
   v="$($OPENSSL_BIN version | awk '{print $2}')"
   OPENSSL_MAJOR="${v%%.*}"
+  ok "OpenSSL detected: $v"
+}
 
+detect_pkcs11_stack() {
   if [[ "$OPENSSL_MAJOR" == "3" ]]; then
     detect_provider_or_engine_for_ossl3
   elif [[ "$OPENSSL_MAJOR" == "1" ]]; then
     detect_engine_for_ossl11
   else
-    die "Unsupported OpenSSL version: $v"
+    die "Unsupported OpenSSL version: $($OPENSSL_BIN version)"
   fi
-
-  info "Detected OpenSSL version: $v (mode=${PKCS11_MODE})"
-  if (( dry_run == 1 )); then
-    info "[dry-run] PKCS#11 capability validated."
-  fi
+  ok "PKCS#11 integration available via ${PKCS11_MODE}."
 }
 
 detect_provider_or_engine_for_ossl3() {
@@ -125,7 +119,29 @@ pkcs11_key_uri() {
   printf 'pkcs11:token=%s;object=%s;type=private' "$token_label" "$key_label"
 }
 
-generate_root_self_signed() {
+generate_local_root_key() {
+  local key_type="$1" key_file="$2" dry_run="$3"
+  if (( dry_run == 1 )); then
+    info "[dry-run] Would generate local ${key_type} private key at ${key_file}."
+    return
+  fi
+
+  mkdir -p "$(dirname "$key_file")"
+  case "$key_type" in
+    rsa)
+      "$OPENSSL_BIN" genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:4096 -out "$key_file"
+      ;;
+    ecdsa)
+      "$OPENSSL_BIN" genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-384 -out "$key_file"
+      ;;
+    *) die "Unsupported local key type: $key_type" ;;
+  esac
+  chmod 600 "$key_file"
+  chown root:root "$key_file"
+  ok "Local private key generated with root-only permissions: $key_file"
+}
+
+generate_root_self_signed_luna() {
   local key_label="$1" subj="$2" validity_days="$3" profile="$4" out_pem="$5" out_der="$6" run_dir="$7" dry_run="$8"
   local pin keyuri openssl_conf
   pin="$(prompt_secret "Enter CO PIN for signing Root certificate (hidden)")"
@@ -139,7 +155,7 @@ generate_root_self_signed() {
 
   openssl_pkcs11_env "$openssl_conf"
   local serial_hex
-  serial_hex="$(openssl rand -hex 16)"
+  serial_hex="$($OPENSSL_BIN rand -hex 16)"
 
   if [[ "$PKCS11_MODE" == "provider" ]]; then
     OPENSSL_CONF="$openssl_conf" PKCS11_PIN="$pin" \
@@ -158,7 +174,23 @@ generate_root_self_signed() {
   unset pin
 }
 
-sign_issuing_csr() {
+generate_root_self_signed_software() {
+  local key_file="$1" subj="$2" validity_days="$3" profile="$4" out_pem="$5" out_der="$6" dry_run="$7"
+  if (( dry_run == 1 )); then
+    info "[dry-run] Would self-sign Root cert using local key ${key_file}."
+    return
+  fi
+
+  local serial_hex
+  serial_hex="$($OPENSSL_BIN rand -hex 16)"
+  "$OPENSSL_BIN" req -new -x509 -sha256 -days "$validity_days" \
+    -subj "$subj" -set_serial "0x${serial_hex}" \
+    -config "$profile" -extensions v3_root_ca \
+    -key "$key_file" -out "$out_pem"
+  "$OPENSSL_BIN" x509 -in "$out_pem" -outform DER -out "$out_der"
+}
+
+sign_issuing_csr_luna() {
   local csr="$1" out_pem="$2" out_der="$3" chain_pem="$4" run_dir="$5" dry_run="$6"
   local root_cert root_key_label profile validity pin keyuri openssl_conf
   root_cert="$(prompt_input "Path to Root CA certificate PEM" "${run_dir}/certs/rootca.pem")"
@@ -193,7 +225,28 @@ sign_issuing_csr() {
   unset pin
 }
 
-generate_root_crl() {
+sign_issuing_csr_software() {
+  local csr="$1" out_pem="$2" out_der="$3" chain_pem="$4" run_dir="$5" root_key_file="$6" dry_run="$7"
+  local root_cert validity profile
+  root_cert="$(prompt_input "Path to Root CA certificate PEM" "${run_dir}/certs/rootca.pem")"
+  [[ -f "$root_cert" || $dry_run -eq 1 ]] || die "Root cert not found: $root_cert"
+  [[ -f "$root_key_file" || $dry_run -eq 1 ]] || die "Root key file not found: $root_key_file"
+  validity="$(prompt_input "Issuing CA validity days" "${DEFAULT_ISSUING_VALIDITY_DAYS:-3650}")"
+  profile="${PWD}/profiles/issuing_ca.cnf"
+
+  if (( dry_run == 1 )); then
+    info "[dry-run] Would sign CSR ${csr} with local Root key ${root_key_file}."
+    return
+  fi
+
+  "$OPENSSL_BIN" x509 -req -in "$csr" -CA "$root_cert" -CAcreateserial \
+    -days "$validity" -sha256 -extfile "$profile" -extensions v3_issuing_ca \
+    -CAkey "$root_key_file" -out "$out_pem"
+  "$OPENSSL_BIN" x509 -in "$out_pem" -outform DER -out "$out_der"
+  cat "$out_pem" "$root_cert" > "$chain_pem"
+}
+
+generate_root_crl_luna() {
   local run_dir="$1" next_days="$2" out_pem="$3" out_der="$4" dry_run="$5"
   local root_cert root_label pin keyuri openssl_conf index serial crlnumber dbdir ca_conf
   root_cert="$(prompt_input "Path to Root certificate PEM for CRL signing" "${run_dir}/certs/rootca.pem")"
@@ -246,6 +299,46 @@ CFG
   fi
   "$OPENSSL_BIN" crl -in "$out_pem" -outform DER -out "$out_der"
   unset pin
+}
+
+generate_root_crl_software() {
+  local run_dir="$1" next_days="$2" out_pem="$3" out_der="$4" root_key_file="$5" dry_run="$6"
+  local root_cert index serial crlnumber dbdir ca_conf
+  root_cert="$(prompt_input "Path to Root certificate PEM for CRL signing" "${run_dir}/certs/rootca.pem")"
+
+  if (( dry_run == 1 )); then
+    info "[dry-run] Would generate local-key CRL with nextUpdate ${next_days} days."
+    return
+  fi
+
+  dbdir="${run_dir}/tmp/ca-db"
+  mkdir -p "$dbdir"
+  index="${dbdir}/index.txt"
+  serial="${dbdir}/serial"
+  crlnumber="${dbdir}/crlnumber"
+  : > "$index"
+  echo "1000" > "$serial"
+  echo "1000" > "$crlnumber"
+  ca_conf="${run_dir}/configs/ca-crl-software.cnf"
+
+  cat > "$ca_conf" <<CFG
+[ca]
+default_ca = CA_default
+[CA_default]
+database = ${index}
+serial = ${serial}
+crlnumber = ${crlnumber}
+default_md = sha256
+default_crl_days = ${next_days}
+certificate = ${root_cert}
+private_key = ${root_key_file}
+unique_subject = no
+[crl_ext]
+authorityKeyIdentifier = keyid:always
+CFG
+
+  "$OPENSSL_BIN" ca -gencrl -config "$ca_conf" -out "$out_pem" -batch
+  "$OPENSSL_BIN" crl -in "$out_pem" -outform DER -out "$out_der"
 }
 
 generate_cert_report() {

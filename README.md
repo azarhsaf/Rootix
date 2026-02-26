@@ -20,8 +20,29 @@ This tool is intentionally minimal for offline Root CA responsibilities:
 
 ## Entrypoint
 ```bash
-./offline-rootca.sh ceremony [--dry-run]
-./offline-rootca.sh ops [--dry-run]
+./offline-rootca.sh ceremony [--dry-run] [--key-mode luna|software]
+./offline-rootca.sh ops [--dry-run] [--key-mode luna|software]
+```
+
+You can force mode non-interactively with `--key-mode` to avoid interactive selection prompts.
+
+Argument notes:
+- `ceremony`/`ops` and flags can be provided in any order.
+- Copy/paste literals like `[--dry-run]` and `[--key-mode]` are accepted for convenience.
+
+Examples:
+```bash
+# explicit software-mode dry-run (mode token first)
+./offline-rootca.sh ceremony --dry-run --key-mode software
+
+# same with equals form
+./offline-rootca.sh ceremony --dry-run --key-mode=software
+
+# explicit software-mode dry-run (options first; also supported)
+./offline-rootca.sh --key-mode software --dry-run ceremony
+
+# explicit luna-mode ops dry-run
+./offline-rootca.sh ops --dry-run --key-mode luna
 ```
 
 ## Offline package requirements
@@ -51,30 +72,44 @@ Offline install example:
 rpm -Uvh /mnt/offline-rpms/*.rpm
 ```
 
-If provider/engine is absent, script exits with explicit offline remediation instructions.
+If required components are missing, Rootix prints clear offline remediation guidance.
 
-## Security behaviors
-- No secret persistence: all PINs entered with hidden prompt (`read -s`/password dialog).
-- Script only logs sanitized operations.
-- Designed for air-gapped operation.
-- Root private key remains on Luna HSM (operator performs/validates vendor-specific steps where syntax differs).
+## Security behavior
+- Uses `set -euo pipefail`.
+- PIN input is hidden (`read -s`/whiptail passwordbox) and never persisted.
+- Logs are sanitized and redact sensitive tokens.
+- In software mode, private key is written to:
+  - `/var/offline-rootca/outputs/<ORG>/<STAMP>/configs/rootca.key`
+  - permissions: `600`, owner `root:root`.
 
-## Profiles
-Edit these files (version-controlled templates) rather than changing script logic:
+## Profiles (authoritative policy)
+These templates control extensions/validity/policy behavior:
 - `profiles/defaults.env`
 - `profiles/root_ca.cnf`
 - `profiles/issuing_ca.cnf`
 
-## Output layout
-Per run:
+## Output structure
+Per run output path:
 `/var/offline-rootca/outputs/<ORG>/<YYYYMMDD-HHMMSS>/`
 
-Includes:
+Artifacts:
 - `certs/`, `crl/`, `csr/`, `configs/`, `profiles_used/`, `logs/`, `reports/`, `manifests/`, `state/`
-- `SHA256SUMS`
-- `manifest.json`
-- `ceremony_minutes.md`
-- `final_summary.txt`
+- `manifests/SHA256SUMS`
+- `manifests/manifest.json`
+- `reports/ceremony_minutes.md`
+- `reports/final_summary.txt`
 
-## Notes on Luna commands and M-of-N
-Luna firmware/policies vary. Where exact commands are uncertain, script provides guided placeholders and asks operator confirmation after manual execution. Post-conditions are verified via status/listing checks and expected key/cert outputs.
+Minutes and summary include the selected key storage mode, including an explicit indicator when software mode was used.
+
+## Luna command uncertainty handling
+Where vendor command syntax can differ by firmware/policy, Rootix uses guided placeholder steps and asks operator confirmation after manual execution. It does not hallucinate exact Luna command details.
+
+
+### Troubleshooting: stuck at Luna PKCS#11 module prompt
+- If you want software mode, force it explicitly:
+  - `./offline-rootca.sh ceremony --dry-run --key-mode software`
+  - or `./offline-rootca.sh ceremony --dry-run --key-mode=software`
+- For Luna mode in non-interactive contexts, set module path ahead of time:
+  - `export LUNA_PKCS11_MODULE=/usr/safenet/lunaclient/lib/libCryptoki2.so`
+- In `--dry-run`, missing Luna module now reports warnings and does not block for input.
+
