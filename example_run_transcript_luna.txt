@@ -1,0 +1,53 @@
+$ sudo ./offline-rootca.sh ceremony --dry-run
+
+============================================================
+OFFLINE ROOT CA CEREMONY
+============================================================
+Organization (O) [ExampleOrg]: AcmeLabs
+Root CA Common Name (CN) [AcmeLabs Offline Root CA]: AcmeLabs Offline Root CA
+Root CA validity days [7300]: 7300
+Country code (C) [US]: US
+
+Select Root CA Key Storage
+
+  luna) Luna USB HSM (Hardware Protected Key)
+  software) Software Key (Stored Locally for Testing)
+Enter selection: luna
+[OK] Luna HSM mode selected.
+
+============================================================
+Pre-flight checks
+============================================================
+[INFO] Checking OpenSSL availability...
+[OK] OpenSSL detected: 3.2.2
+[OK] Output base path writable: /var/offline-rootca
+[OK] Disk space check passed.
+[OK] Entropy advisory: 512 available.
+[INFO] Current UTC time: 2026-02-25T12:00:00Z
+Confirm system date/time is correct before certificate operations. Continue? [no]: yes
+[WARN] Network interfaces detected. Offline Root CA operation is recommended in air-gapped mode.
+Continue despite active interfaces? [no]: yes
+[INFO] Running Luna-specific checks...
+[OK] PKCS#11 integration available via provider.
+[OK] Detected Luna PKCS#11 module: /usr/safenet/lunaclient/lib/libCryptoki2.so
+[OK] Luna + PKCS#11 checks passed.
+
+============================================================
+Luna key ceremony
+============================================================
+[INFO] [dry-run] Would run lunacm status commands.
+...
+Create non-exportable Root keypair in HSM with label ROOTCA_AcmeLabs_20260225? [no]: yes
+Enter target token/partition label []: ROOT_SLOT
+Enter CO PIN for key generation (input hidden; not stored):
+[INFO] Using CO PIN: 12****89
+[INFO] [dry-run] Would create non-exportable keypair label=ROOTCA_AcmeLabs_20260225 on token=ROOT_SLOT.
+Generate self-signed Root CA certificate with HSM key? [no]: yes
+Enter CO PIN for signing Root certificate (hidden):
+Enter token/partition label for OpenSSL PKCS#11 URI []: ROOT_SLOT
+[INFO] [dry-run] Would self-sign Root cert subject=/C=US/O=AcmeLabs/CN=AcmeLabs Offline Root CA, validity=7300, key=pkcs11:token=ROOT_SLOT;object=ROOTCA_AcmeLabs_20260225;type=private.
+Generate initial Root CRL (nextUpdate 30 days)? [no]: yes
+Enter CO PIN for CRL generation (hidden):
+Enter token/partition label for OpenSSL PKCS#11 URI []: ROOT_SLOT
+[INFO] [dry-run] Would generate CRL with nextUpdate 30 days.
+[OK] Ceremony complete. Output directory: /var/offline-rootca/outputs/AcmeLabs/20260225-120000
