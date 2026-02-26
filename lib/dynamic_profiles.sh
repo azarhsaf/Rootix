@@ -64,3 +64,25 @@ dynamic_validity_days() {
     printf '%s' "$fallback"
   fi
 }
+
+
+generate_dynamic_req_config() {
+  local json="$1" section="$2" run_dir="$3"
+  local out="${run_dir}/configs/dynamic-req-${section}.cnf"
+  {
+    echo '[ req ]'
+    echo 'default_bits = 4096'
+    echo 'default_md = sha256'
+    echo 'distinguished_name = dn'
+    echo 'prompt = no'
+    echo "x509_extensions = ${section}"
+    echo
+    echo '[ dn ]'
+    echo 'CN = placeholder'
+    echo 'O = placeholder'
+    echo 'C = US'
+    echo
+    _build_dynamic_ext_block "$json" "$section"
+  } > "$out"
+  printf '%s' "$out"
+}

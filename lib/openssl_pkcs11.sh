@@ -143,10 +143,11 @@ generate_local_root_key() {
 
 generate_root_self_signed_luna() {
   local key_label="$1" subj="$2" validity_days="$3" profile="$4" out_pem="$5" out_der="$6" run_dir="$7" dry_run="$8"
-  local pin keyuri openssl_conf
-  local extfile="$profile" extsection="v3_root_ca"
+  local pin keyuri openssl_conf req_cfg
+  local extsection="v3_root_ca"
+  req_cfg="$profile"
   if [[ "${PROFILE_MODE:-static}" == "dynamic" ]]; then
-    extfile="$(generate_dynamic_extfile "$DYNAMIC_ROOT_PROFILE_JSON" "$extsection" "$run_dir")"
+    req_cfg="$(generate_dynamic_req_config "$DYNAMIC_ROOT_PROFILE_JSON" "$extsection" "$run_dir")"
     validity_days="$(dynamic_validity_days "$DYNAMIC_ROOT_PROFILE_JSON" "$validity_days")"
   fi
   pin="$(prompt_secret "Enter CO PIN for signing Root certificate (hidden)")"
@@ -166,13 +167,13 @@ generate_root_self_signed_luna() {
     OPENSSL_CONF="$openssl_conf" PKCS11_PIN="$pin" \
       "$OPENSSL_BIN" req -new -x509 -sha256 -days "$validity_days" \
       -subj "$subj" -set_serial "0x${serial_hex}" \
-      -extfile "$extfile" -extensions "$extsection" \
+      -config "$req_cfg" -extensions "$extsection" \
       -key "$keyuri" -out "$out_pem"
   else
     OPENSSL_CONF="$openssl_conf" PKCS11_PIN="$pin" \
       "$OPENSSL_BIN" req -new -x509 -sha256 -days "$validity_days" \
       -subj "$subj" -set_serial "0x${serial_hex}" \
-      -extfile "$extfile" -extensions "$extsection" \
+      -config "$req_cfg" -extensions "$extsection" \
       -engine pkcs11 -keyform engine -key "$keyuri" -out "$out_pem"
   fi
   "$OPENSSL_BIN" x509 -in "$out_pem" -outform DER -out "$out_der"
@@ -181,9 +182,9 @@ generate_root_self_signed_luna() {
 
 generate_root_self_signed_software() {
   local key_file="$1" subj="$2" validity_days="$3" profile="$4" out_pem="$5" out_der="$6" dry_run="$7"
-  local extfile="$profile" extsection="v3_root_ca"
+  local req_cfg="$profile" extsection="v3_root_ca"
   if [[ "${PROFILE_MODE:-static}" == "dynamic" ]]; then
-    extfile="$(generate_dynamic_extfile "$DYNAMIC_ROOT_PROFILE_JSON" "$extsection" "$(dirname "$out_pem")/..")"
+    req_cfg="$(generate_dynamic_req_config "$DYNAMIC_ROOT_PROFILE_JSON" "$extsection" "$(dirname "$out_pem")/..")"
     validity_days="$(dynamic_validity_days "$DYNAMIC_ROOT_PROFILE_JSON" "$validity_days")"
   fi
   if (( dry_run == 1 )); then
@@ -195,7 +196,7 @@ generate_root_self_signed_software() {
   serial_hex="$($OPENSSL_BIN rand -hex 16)"
   "$OPENSSL_BIN" req -new -x509 -sha256 -days "$validity_days" \
     -subj "$subj" -set_serial "0x${serial_hex}" \
-    -extfile "$extfile" -extensions "$extsection" \
+    -config "$req_cfg" -extensions "$extsection" \
     -key "$key_file" -out "$out_pem"
   "$OPENSSL_BIN" x509 -in "$out_pem" -outform DER -out "$out_der"
 }
