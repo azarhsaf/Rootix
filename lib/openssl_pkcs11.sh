@@ -144,6 +144,11 @@ generate_local_root_key() {
 generate_root_self_signed_luna() {
   local key_label="$1" subj="$2" validity_days="$3" profile="$4" out_pem="$5" out_der="$6" run_dir="$7" dry_run="$8"
   local pin keyuri openssl_conf
+  local extfile="$profile" extsection="v3_root_ca"
+  if [[ "${PROFILE_MODE:-static}" == "dynamic" ]]; then
+    extfile="$(generate_dynamic_extfile "$DYNAMIC_ROOT_PROFILE_JSON" "$extsection" "$run_dir")"
+    validity_days="$(dynamic_validity_days "$DYNAMIC_ROOT_PROFILE_JSON" "$validity_days")"
+  fi
   pin="$(prompt_secret "Enter CO PIN for signing Root certificate (hidden)")"
   keyuri="$(pkcs11_key_uri "$key_label")"
   openssl_conf="${run_dir}/configs/openssl-pkcs11.cnf"
@@ -161,13 +166,13 @@ generate_root_self_signed_luna() {
     OPENSSL_CONF="$openssl_conf" PKCS11_PIN="$pin" \
       "$OPENSSL_BIN" req -new -x509 -sha256 -days "$validity_days" \
       -subj "$subj" -set_serial "0x${serial_hex}" \
-      -config "$profile" -extensions v3_root_ca \
+      -extfile "$extfile" -extensions "$extsection" \
       -key "$keyuri" -out "$out_pem"
   else
     OPENSSL_CONF="$openssl_conf" PKCS11_PIN="$pin" \
       "$OPENSSL_BIN" req -new -x509 -sha256 -days "$validity_days" \
       -subj "$subj" -set_serial "0x${serial_hex}" \
-      -config "$profile" -extensions v3_root_ca \
+      -extfile "$extfile" -extensions "$extsection" \
       -engine pkcs11 -keyform engine -key "$keyuri" -out "$out_pem"
   fi
   "$OPENSSL_BIN" x509 -in "$out_pem" -outform DER -out "$out_der"
@@ -176,6 +181,11 @@ generate_root_self_signed_luna() {
 
 generate_root_self_signed_software() {
   local key_file="$1" subj="$2" validity_days="$3" profile="$4" out_pem="$5" out_der="$6" dry_run="$7"
+  local extfile="$profile" extsection="v3_root_ca"
+  if [[ "${PROFILE_MODE:-static}" == "dynamic" ]]; then
+    extfile="$(generate_dynamic_extfile "$DYNAMIC_ROOT_PROFILE_JSON" "$extsection" "$(dirname "$out_pem")/..")"
+    validity_days="$(dynamic_validity_days "$DYNAMIC_ROOT_PROFILE_JSON" "$validity_days")"
+  fi
   if (( dry_run == 1 )); then
     info "[dry-run] Would self-sign Root cert using local key ${key_file}."
     return
@@ -185,7 +195,7 @@ generate_root_self_signed_software() {
   serial_hex="$($OPENSSL_BIN rand -hex 16)"
   "$OPENSSL_BIN" req -new -x509 -sha256 -days "$validity_days" \
     -subj "$subj" -set_serial "0x${serial_hex}" \
-    -config "$profile" -extensions v3_root_ca \
+    -extfile "$extfile" -extensions "$extsection" \
     -key "$key_file" -out "$out_pem"
   "$OPENSSL_BIN" x509 -in "$out_pem" -outform DER -out "$out_der"
 }
@@ -198,6 +208,11 @@ sign_issuing_csr_luna() {
   root_key_label="$(prompt_input "Root key label in HSM" "${ROOTCA_KEY_LABEL:-}")"
   validity="$(prompt_input "Issuing CA validity days" "${DEFAULT_ISSUING_VALIDITY_DAYS:-3650}")"
   profile="${PWD}/profiles/issuing_ca.cnf"
+  local extfile="$profile" extsection="v3_issuing_ca"
+  if [[ "${PROFILE_MODE:-static}" == "dynamic" ]]; then
+    extfile="$(generate_dynamic_extfile "$DYNAMIC_ISSUING_PROFILE_JSON" "$extsection" "$run_dir")"
+    validity="$(dynamic_validity_days "$DYNAMIC_ISSUING_PROFILE_JSON" "$validity")"
+  fi
   pin="$(prompt_secret "Enter CO PIN for SubCA signing (hidden)")"
   keyuri="$(pkcs11_key_uri "$root_key_label")"
   openssl_conf="${run_dir}/configs/openssl-pkcs11.cnf"
@@ -212,12 +227,12 @@ sign_issuing_csr_luna() {
   if [[ "$PKCS11_MODE" == "provider" ]]; then
     OPENSSL_CONF="$openssl_conf" PKCS11_PIN="$pin" \
       "$OPENSSL_BIN" x509 -req -in "$csr" -CA "$root_cert" -CAcreateserial \
-      -days "$validity" -sha256 -extfile "$profile" -extensions v3_issuing_ca \
+      -days "$validity" -sha256 -extfile "$extfile" -extensions "$extsection" \
       -CAkey "$keyuri" -out "$out_pem"
   else
     OPENSSL_CONF="$openssl_conf" PKCS11_PIN="$pin" \
       "$OPENSSL_BIN" x509 -req -in "$csr" -CA "$root_cert" -CAcreateserial \
-      -days "$validity" -sha256 -extfile "$profile" -extensions v3_issuing_ca \
+      -days "$validity" -sha256 -extfile "$extfile" -extensions "$extsection" \
       -engine pkcs11 -CAkeyform engine -CAkey "$keyuri" -out "$out_pem"
   fi
   "$OPENSSL_BIN" x509 -in "$out_pem" -outform DER -out "$out_der"
@@ -233,6 +248,11 @@ sign_issuing_csr_software() {
   [[ -f "$root_key_file" || $dry_run -eq 1 ]] || die "Root key file not found: $root_key_file"
   validity="$(prompt_input "Issuing CA validity days" "${DEFAULT_ISSUING_VALIDITY_DAYS:-3650}")"
   profile="${PWD}/profiles/issuing_ca.cnf"
+  local extfile="$profile" extsection="v3_issuing_ca"
+  if [[ "${PROFILE_MODE:-static}" == "dynamic" ]]; then
+    extfile="$(generate_dynamic_extfile "$DYNAMIC_ISSUING_PROFILE_JSON" "$extsection" "$run_dir")"
+    validity="$(dynamic_validity_days "$DYNAMIC_ISSUING_PROFILE_JSON" "$validity")"
+  fi
 
   if (( dry_run == 1 )); then
     info "[dry-run] Would sign CSR ${csr} with local Root key ${root_key_file}."
@@ -240,7 +260,7 @@ sign_issuing_csr_software() {
   fi
 
   "$OPENSSL_BIN" x509 -req -in "$csr" -CA "$root_cert" -CAcreateserial \
-    -days "$validity" -sha256 -extfile "$profile" -extensions v3_issuing_ca \
+    -days "$validity" -sha256 -extfile "$extfile" -extensions "$extsection" \
     -CAkey "$root_key_file" -out "$out_pem"
   "$OPENSSL_BIN" x509 -in "$out_pem" -outform DER -out "$out_der"
   cat "$out_pem" "$root_cert" > "$chain_pem"

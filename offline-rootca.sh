@@ -14,6 +14,8 @@ source "${LIB_DIR}/hsm_luna.sh"
 source "${LIB_DIR}/openssl_pkcs11.sh"
 # shellcheck source=lib/profiles.sh
 source "${LIB_DIR}/profiles.sh"
+# shellcheck source=lib/dynamic_profiles.sh
+source "${LIB_DIR}/dynamic_profiles.sh"
 # shellcheck source=lib/audit.sh
 source "${LIB_DIR}/audit.sh"
 
@@ -470,11 +472,15 @@ ceremony_mode() {
 
   create_run_context "$org_slug"
   load_defaults_profile "${PROFILE_DIR}/defaults.env"
+  init_profile_mode
   copy_profiles_used "$PROFILE_DIR" "$RUN_DIR" "$DRY_RUN"
 
   select_key_storage_mode
   run_preflight
   step_hsm_guided_flow
+  if [[ "$PROFILE_MODE" == "dynamic" ]]; then
+    validity="$(dynamic_validity_days "$DYNAMIC_ROOT_PROFILE_JSON" "$validity")"
+  fi
   step_root_key_and_cert "$org" "$cn" "$validity" "$country"
   step_initial_crl "${DEFAULT_CRL_NEXT_DAYS:-30}"
   step_optional_sign_subca
@@ -488,6 +494,7 @@ ops_prepare_context() {
   org="$(prompt_input "Organization tag for output (helps group this run)" "ops")"
   create_run_context "${org// /_}"
   load_defaults_profile "${PROFILE_DIR}/defaults.env"
+  init_profile_mode
   copy_profiles_used "$PROFILE_DIR" "$RUN_DIR" "$DRY_RUN"
   select_key_storage_mode
   run_preflight

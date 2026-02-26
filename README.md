@@ -124,3 +124,29 @@ Rootix now auto-discovers recent artifacts and lets operators select from menus 
 - existing `*.tar.gz` transfer packages for verification
 
 This reduces shell/path typing for non-technical operators.
+
+
+## Dynamic certificate profiles (JSON)
+Rootix now supports two certificate profile modes:
+- `static` (existing behavior): uses `profiles/root_ca.cnf` and `profiles/issuing_ca.cnf`
+- `dynamic` (new): uses JSON-driven runtime extension generation
+
+Enable dynamic mode by setting in `profiles/defaults.env`:
+```bash
+DEFAULT_PROFILE_MODE="dynamic"
+```
+
+JSON files (editable):
+- `profiles/dynamic/root_ca.json`
+- `profiles/dynamic/issuing_ca.json`
+
+Supported dynamic fields:
+- `basicConstraints`
+- `keyUsage`
+- `extendedKeyUsage`
+- `certificatePolicies`
+- `authorityInfoAccess`
+- `crlDistributionPoints`
+- `validityDays`
+
+At runtime, Rootix generates temporary OpenSSL extension config files under the run directory (`configs/dynamic-*.cnf`) and reuses existing signing logic.

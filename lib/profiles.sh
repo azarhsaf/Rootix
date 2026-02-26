@@ -20,4 +20,8 @@ copy_profiles_used() {
     return
   fi
   cp -a "$profile_dir"/*.cnf "$profile_dir"/*.env "${run_dir}/profiles_used/"
+  if [[ -d "$profile_dir/dynamic" ]]; then
+    mkdir -p "${run_dir}/profiles_used/dynamic"
+    cp -a "$profile_dir"/dynamic/*.json "${run_dir}/profiles_used/dynamic/" 2>/dev/null || true
+  fi
 }
