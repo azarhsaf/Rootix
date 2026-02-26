@@ -113,3 +113,14 @@ Where vendor command syntax can differ by firmware/policy, Rootix uses guided pl
   - `export LUNA_PKCS11_MODULE=/usr/safenet/lunaclient/lib/libCryptoki2.so`
 - In `--dry-run`, missing Luna module now reports warnings and does not block for input.
 
+
+
+## Operator-friendly path memory (ops mode)
+Rootix now auto-discovers recent artifacts and lets operators select from menus before manual typing, including:
+- existing `rootca.pem`
+- existing `rootca.key` (software mode)
+- issuing certs for chain export
+- previous run directories for transfer package creation
+- existing `*.tar.gz` transfer packages for verification
+
+This reduces shell/path typing for non-technical operators.

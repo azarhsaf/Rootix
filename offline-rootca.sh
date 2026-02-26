@@ -26,6 +26,88 @@ ROOTCA_KEY_MODE_ARG=""
 ROOTCA_KEY_FILE=""
 TMPDIR_CLEANUP=""
 
+ROOTIX_BASE="/var/offline-rootca"
+
+show_rootix_intro() {
+  section "Rootix – Offline Root CA"
+  info "Professional offline Root CA automation toolkit"
+  info "Contact: azarbemd@gmail.com"
+  info "Modes: Production (Luna HSM) / Lab (Software Key)"
+}
+
+find_recent_files() {
+  local pattern="$1" limit="${2:-8}"
+  find "${ROOTIX_BASE}/outputs" -type f -name "$pattern" -printf '%T@ %p
+' 2>/dev/null     | sort -nr | head -n "$limit" | awk '{ $1=""; sub(/^ /, ""); print }'
+}
+
+choose_file_with_memory() {
+  local label="$1" pattern="$2" fallback="$3" allow_empty="${4:-0}"
+  local -a files=()
+  mapfile -t files < <(find_recent_files "$pattern" 8)
+
+  if (( ${#files[@]} > 0 )); then
+    local args=() idx=1 choice
+    for f in "${files[@]}"; do
+      args+=("$idx" "$f")
+      idx=$((idx+1))
+    done
+    args+=("M" "Manual path entry")
+    if (( allow_empty == 1 )); then
+      args+=("S" "Skip")
+    fi
+    choice="$(menu_select "$label" "${args[@]}")"
+    if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >=1 && choice <= ${#files[@]} )); then
+      printf '%s' "${files[$((choice-1))]}"
+      return
+    fi
+    if [[ "$choice" == "S" && $allow_empty -eq 1 ]]; then
+      printf ''
+      return
+    fi
+  fi
+
+  while true; do
+    local in
+    in="$(prompt_input "$label" "$fallback")"
+    if [[ -z "$in" && $allow_empty -eq 1 ]]; then
+      printf ''
+      return
+    fi
+    if [[ -f "$in" ]]; then
+      printf '%s' "$in"
+      return
+    fi
+    warn "File not found: $in"
+    confirm_yes_no "Retry path entry?" "yes" || die "Operator cancelled file selection"
+  done
+}
+
+choose_dir_with_memory() {
+  local label="$1" fallback="$2"
+  local -a dirs=()
+  mapfile -t dirs < <(find "${ROOTIX_BASE}/outputs" -mindepth 2 -maxdepth 2 -type d -printf '%T@ %p
+' 2>/dev/null | sort -nr | head -n 8 | awk '{ $1=""; sub(/^ /, ""); print }')
+  if (( ${#dirs[@]} > 0 )); then
+    local args=() idx=1 choice
+    for d in "${dirs[@]}"; do args+=("$idx" "$d"); idx=$((idx+1)); done
+    args+=("M" "Manual path entry")
+    choice="$(menu_select "$label" "${args[@]}")"
+    if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice>=1 && choice<=${#dirs[@]} )); then
+      printf '%s' "${dirs[$((choice-1))]}"
+      return
+    fi
+  fi
+  while true; do
+    local d
+    d="$(prompt_input "$label" "$fallback")"
+    [[ -d "$d" ]] && { printf '%s' "$d"; return; }
+    warn "Directory not found: $d"
+    confirm_yes_no "Retry directory entry?" "yes" || die "Operator cancelled directory selection"
+  done
+}
+
+
 cleanup() {
   if [[ -n "${TMPDIR_CLEANUP}" && -d "${TMPDIR_CLEANUP}" ]]; then
     rm -rf "${TMPDIR_CLEANUP}"
@@ -118,27 +200,34 @@ select_key_storage_mode() {
     return
   fi
 
-  section "Select Root CA Key Storage"
-  local choice
-  if (( UI_USE_WHIPTAIL == 1 )); then
-    choice="$(menu_select "Select Root CA Key Storage" \
-      "1" "Luna USB HSM (Hardware Protected Key)" \
-      "2" "Software Key (Stored Locally for Testing)")"
-  else
-    cat <<'SELECT_EOF'
+  while true; do
+    section "Select Root CA Key Storage"
+    local choice
+    if (( UI_USE_WHIPTAIL == 1 )); then
+      choice="$(menu_select "Select Root CA Key Storage" \
+        "1" "Luna USB HSM (Hardware Protected Key)" \
+        "2" "Software Key (Stored Locally for Testing)")"
+    else
+      cat <<'SELECT_EOF'
 Select Root CA Key Storage:
 
 1) Luna USB HSM (Hardware Protected Key)
 2) Software Key (Stored Locally for Testing)
 SELECT_EOF
-    read -r -p "Enter selection: " choice
-  fi
+      read -r -p "Enter selection: " choice
+    fi
 
-  case "$choice" in
-    luna|1) ROOTCA_KEY_MODE="luna" ;;
-    software|2) ROOTCA_KEY_MODE="software" ;;
-    *) die "Invalid key storage selection: $choice" ;;
-  esac
+    case "$choice" in
+      luna|1) ROOTCA_KEY_MODE="luna" ;;
+      software|2) ROOTCA_KEY_MODE="software" ;;
+      *)
+        warn "Invalid selection: $choice"
+        continue
+        ;;
+    esac
+    break
+  done
+
   export ROOTCA_KEY_MODE
 
   if [[ "$ROOTCA_KEY_MODE" == "software" ]]; then
@@ -291,12 +380,17 @@ step_root_key_and_cert() {
       "${PROFILE_DIR}/root_ca.cnf" "$cert_pem" "$cert_der" "$RUN_DIR" "$DRY_RUN"
   else
     local key_alg
-    key_alg="$(menu_select "Select software key algorithm" \
-      "rsa" "RSA 4096 (default)" \
-      "ecdsa" "ECDSA P-384")"
-    [[ "$key_alg" == "rsa" || "$key_alg" == "ecdsa" || "$key_alg" == "1" || "$key_alg" == "2" ]] || die "Invalid key algorithm selection"
-    [[ "$key_alg" == "1" ]] && key_alg="rsa"
-    [[ "$key_alg" == "2" ]] && key_alg="ecdsa"
+    while true; do
+      key_alg="$(menu_select "Select software key algorithm" \
+        "rsa" "RSA 4096 (default)" \
+        "ecdsa" "ECDSA P-384")"
+      [[ "$key_alg" == "1" ]] && key_alg="rsa"
+      [[ "$key_alg" == "2" ]] && key_alg="ecdsa"
+      if [[ "$key_alg" == "rsa" || "$key_alg" == "ecdsa" ]]; then
+        break
+      fi
+      warn "Invalid key algorithm selection: $key_alg"
+    done
     ROOTCA_KEY_FILE="${RUN_DIR}/configs/rootca.key"
     export ROOTCA_KEY_FILE
 
@@ -362,6 +456,7 @@ step_optional_sign_subca() {
 
 ceremony_mode() {
   require_root
+  show_rootix_intro
   banner "OFFLINE ROOT CA CEREMONY"
 
   local org cn validity country org_slug
@@ -390,15 +485,18 @@ ceremony_mode() {
 
 ops_prepare_context() {
   local org
-  org="$(prompt_input "Organization tag for output" "ops")"
+  org="$(prompt_input "Organization tag for output (helps group this run)" "ops")"
   create_run_context "${org// /_}"
   load_defaults_profile "${PROFILE_DIR}/defaults.env"
   copy_profiles_used "$PROFILE_DIR" "$RUN_DIR" "$DRY_RUN"
   select_key_storage_mode
   run_preflight
+
+  ROOTCA_CERT_PATH="$(choose_file_with_memory "Select existing Root certificate PEM" "rootca.pem" "${ROOTIX_BASE}/outputs" 0)"
+  export ROOTCA_CERT_PATH
+
   if [[ "$ROOTCA_KEY_MODE" == "software" ]]; then
-    ROOTCA_KEY_FILE="$(prompt_input "Path to existing software Root key" "/var/offline-rootca/rootca.key")"
-    [[ -f "$ROOTCA_KEY_FILE" || $DRY_RUN -eq 1 ]] || die "Software Root key not found: $ROOTCA_KEY_FILE"
+    ROOTCA_KEY_FILE="$(choose_file_with_memory "Select existing software Root private key" "rootca.key" "${ROOTIX_BASE}/rootca.key" 0)"
     export ROOTCA_KEY_FILE
   fi
 }
@@ -427,8 +525,8 @@ ops_generate_crl() {
 
 ops_export_chain() {
   local cert root out_dir
-  cert="$(prompt_input "Path to issuing cert PEM" "")"
-  root="$(prompt_input "Path to root cert PEM" "")"
+  cert="$(choose_file_with_memory "Select issuing cert PEM" "issuing_ca_cert.pem" "" 0)"
+  root="$(choose_file_with_memory "Select root cert PEM" "rootca.pem" "" 0)"
   [[ -f "$cert" && -f "$root" ]] || die "Missing cert file(s)."
   out_dir="$(prompt_input "Output directory for chain export" "/var/offline-rootca/exports")"
   if (( DRY_RUN == 0 )); then
@@ -441,7 +539,7 @@ ops_export_chain() {
 
 ops_transfer_package() {
   local source_dir out_file
-  source_dir="$(prompt_input "Source output directory" "/var/offline-rootca/outputs")"
+  source_dir="$(choose_dir_with_memory "Select output run directory to package" "${ROOTIX_BASE}/outputs")"
   out_file="$(prompt_input "Transfer tar.gz path" "/var/offline-rootca/transfer_package.tar.gz")"
   [[ -d "$source_dir" ]] || die "Source directory missing."
   if (( DRY_RUN == 0 )); then
@@ -453,7 +551,7 @@ ops_transfer_package() {
 
 ops_verify_package() {
   local pkg hashf
-  pkg="$(prompt_input "Package tar.gz path" "")"
+  pkg="$(choose_file_with_memory "Select transfer package tar.gz" "*.tar.gz" "${ROOTIX_BASE}/transfer_package.tar.gz" 0)"
   hashf="$(prompt_input "Checksum file path" "${pkg}.sha256")"
   [[ -f "$pkg" && -f "$hashf" ]] || die "Missing package/checksum file."
   if (( DRY_RUN == 0 )); then
@@ -465,6 +563,7 @@ ops_verify_package() {
 
 ops_mode() {
   require_root
+  show_rootix_intro
   banner "OFFLINE ROOT CA OPERATIONS"
   while true; do
     local choice
@@ -477,6 +576,11 @@ ops_mode() {
       "6" "Create offline transfer package" \
       "7" "Verify transfer package integrity" \
       "8" "Exit")"
+    if [[ -z "$choice" ]]; then
+      warn "No selection received. Returning to shell."
+      break
+    fi
+
     case "$choice" in
       1)
         create_run_context "ops_status"
@@ -491,8 +595,9 @@ ops_mode() {
       2)
         create_run_context "ops_user"
         load_defaults_profile "${PROFILE_DIR}/defaults.env"
-        select_key_storage_mode
-        [[ "$ROOTCA_KEY_MODE" == "luna" ]] || die "Additional HSM user option applies only in Luna mode."
+        ROOTCA_KEY_MODE="luna"
+        export ROOTCA_KEY_MODE
+        info "This operation requires Luna mode."
         run_preflight
         guided_additional_user "$DRY_RUN"
         finalize_audit_bundle "$RUN_DIR" "$MODE" "$DRY_RUN"

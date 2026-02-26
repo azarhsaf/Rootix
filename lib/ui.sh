@@ -68,7 +68,6 @@ menu_select() {
     if whiptail --title "$title" --menu "$title" 20 90 10 "$@" 3>&1 1>&2 2>&3; then
       return 0
     fi
-    warn "whiptail UI unavailable/cancelled; falling back to plain prompts."
   fi
 
   local items=("$@")
@@ -77,7 +76,10 @@ menu_select() {
   for (( i=0; i<${#items[@]}; i+=2 )); do
     printf '  %s) %s\n' "${items[i]}" "${items[i+1]}"
   done
-  read -r -p "Enter selection: " REPLY
+  if ! read -r -p "Enter selection: " REPLY; then
+    printf ""
+    return 0
+  fi
   printf '%s' "$REPLY"
 }
 

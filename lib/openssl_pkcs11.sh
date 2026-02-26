@@ -193,7 +193,7 @@ generate_root_self_signed_software() {
 sign_issuing_csr_luna() {
   local csr="$1" out_pem="$2" out_der="$3" chain_pem="$4" run_dir="$5" dry_run="$6"
   local root_cert root_key_label profile validity pin keyuri openssl_conf
-  root_cert="$(prompt_input "Path to Root CA certificate PEM" "${run_dir}/certs/rootca.pem")"
+  root_cert="$(prompt_input "Path to Root CA certificate PEM" "${ROOTCA_CERT_PATH:-${run_dir}/certs/rootca.pem}")"
   [[ -f "$root_cert" || $dry_run -eq 1 ]] || die "Root cert not found: $root_cert"
   root_key_label="$(prompt_input "Root key label in HSM" "${ROOTCA_KEY_LABEL:-}")"
   validity="$(prompt_input "Issuing CA validity days" "${DEFAULT_ISSUING_VALIDITY_DAYS:-3650}")"
@@ -228,7 +228,7 @@ sign_issuing_csr_luna() {
 sign_issuing_csr_software() {
   local csr="$1" out_pem="$2" out_der="$3" chain_pem="$4" run_dir="$5" root_key_file="$6" dry_run="$7"
   local root_cert validity profile
-  root_cert="$(prompt_input "Path to Root CA certificate PEM" "${run_dir}/certs/rootca.pem")"
+  root_cert="$(prompt_input "Path to Root CA certificate PEM" "${ROOTCA_CERT_PATH:-${run_dir}/certs/rootca.pem}")"
   [[ -f "$root_cert" || $dry_run -eq 1 ]] || die "Root cert not found: $root_cert"
   [[ -f "$root_key_file" || $dry_run -eq 1 ]] || die "Root key file not found: $root_key_file"
   validity="$(prompt_input "Issuing CA validity days" "${DEFAULT_ISSUING_VALIDITY_DAYS:-3650}")"
@@ -249,7 +249,7 @@ sign_issuing_csr_software() {
 generate_root_crl_luna() {
   local run_dir="$1" next_days="$2" out_pem="$3" out_der="$4" dry_run="$5"
   local root_cert root_label pin keyuri openssl_conf index serial crlnumber dbdir ca_conf
-  root_cert="$(prompt_input "Path to Root certificate PEM for CRL signing" "${run_dir}/certs/rootca.pem")"
+  root_cert="$(prompt_input "Path to Root certificate PEM for CRL signing" "${ROOTCA_CERT_PATH:-${run_dir}/certs/rootca.pem}")"
   root_label="$(prompt_input "Root key label for CRL signing" "${ROOTCA_KEY_LABEL:-}")"
   pin="$(prompt_secret "Enter CO PIN for CRL generation (hidden)")"
   keyuri="$(pkcs11_key_uri "$root_label")"
@@ -304,7 +304,7 @@ CFG
 generate_root_crl_software() {
   local run_dir="$1" next_days="$2" out_pem="$3" out_der="$4" root_key_file="$5" dry_run="$6"
   local root_cert index serial crlnumber dbdir ca_conf
-  root_cert="$(prompt_input "Path to Root certificate PEM for CRL signing" "${run_dir}/certs/rootca.pem")"
+  root_cert="$(prompt_input "Path to Root certificate PEM for CRL signing" "${ROOTCA_CERT_PATH:-${run_dir}/certs/rootca.pem}")"
 
   if (( dry_run == 1 )); then
     info "[dry-run] Would generate local-key CRL with nextUpdate ${next_days} days."
